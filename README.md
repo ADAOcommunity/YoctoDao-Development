@@ -1,6 +1,5 @@
 # Plutus Platform starter project
 
-This project gives a simple starter project for using the Plutus Platform.
 This is the repository dedicated to the continued development of YoctoDAO which is being used as a basis for ₳DAO.
 
 ## Setting up
