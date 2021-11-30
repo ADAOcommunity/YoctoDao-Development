@@ -1,0 +1,125 @@
+cabal-version:      2.4
+name:               YoctoDao
+version:            0.1.0.0
+
+-- synopsis:
+-- YoctoDAO is considered to be the most basic building block in a DAO and is being used and supported by ₳DAO.
+
+-- YoctoDAO supports governance through proposals which can do one of three things:
+-- 1) Mint new governance tokens which must be spent to the DAO's treasury.
+-- 2) Spend a specified value of tokens from the treasury to a specified address.
+-- 3) Update the script address of the DAO's Identity NFT.
+-- Validation criteria for what constitutes a valid proposal may change over time.
+
+-- A URL where users can report bugs.
+-- bug-reports: https://www.github.com/ADADAO/YoctoDao-Development/
+
+license: Apache-2.0
+license-files: LICENSE
+author:             ₳DAO
+maintainer:         Riley-Kilgore@github.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+-- extra-source-files: CHANGELOG.md
+
+flag defer-plugin-errors
+    description:
+        Defer errors from the plugin, useful for things like Haddock that can't handle it.
+    default: False
+    manual: True
+
+common lang
+    default-language:   Haskell2010
+    ghc-options:
+      -Wall -Wnoncanonical-monad-instances
+      -Wincomplete-uni-patterns -Wincomplete-record-updates
+      -Wredundant-constraints -Widentities -rtsopts
+      -- See Plutus Tx readme
+      -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
+    if flag(defer-plugin-errors)
+        ghc-options: -fplugin-opt PlutusTx.Plugin:defer-errors
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     YoctoDao
+  build-depends:       aeson
+                     , base ^>=4.14.1.0
+                     , bytestring
+                     , containers
+                     , freer-extras
+                     , plutus-core
+                     , plutus-contract
+                     , plutus-ledger
+                     , plutus-ledger-api
+                     , plutus-tx
+                     , plutus-tx-plugin
+                     , text
+                     , playground-common
+                     , cardano-api
+  default-language:   Haskell2010
+  default-extensions: DataKinds
+                      DeriveAnyClass
+                      DeriveGeneric
+                      DerivingStrategies
+                      ExplicitForAll
+                      FunctionalDependencies
+                      GADTs
+                      MultiParamTypeClasses
+                      NamedFieldPuns
+                      OverloadedStrings
+                      PolyKinds
+                      KindSignatures
+                      StandaloneDeriving
+                      TemplateHaskell
+                      TypeApplications
+                      TypeFamilies
+                      TypeOperators
+                      MultiParamTypeClasses
+                      ScopedTypeVariables
+                      StandaloneKindSignatures
+  ghc-options:        -Wall -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas -fno-strictness -fno-spec-constr -fno-specialise
+
+executable           script-dump
+  main-is:           script-dump.hs
+  hs-source-dirs:    exe, src
+  other-modules:     YoctoDao
+  build-depends:     base
+                    , aeson
+                    , cardano-api
+                    , cardano-ledger-alonzo
+                    , bytestring
+                    , containers
+                    , freer-extras
+                    , plutus-core
+                    , plutus-contract
+                    , plutus-ledger
+                    , plutus-ledger-api
+                    , plutus-tx
+                    , plutus-tx-plugin
+                    , text
+                    , serialise
+                    , playground-common
+  default-language:   Haskell2010
+  default-extensions: DataKinds
+                      DeriveAnyClass
+                      DeriveGeneric
+                      DerivingStrategies
+                      ExplicitForAll
+                      FunctionalDependencies
+                      GADTs
+                      MultiParamTypeClasses
+                      NamedFieldPuns
+                      OverloadedStrings
+                      PolyKinds
+                      KindSignatures
+                      StandaloneDeriving
+                      TemplateHaskell
+                      TypeApplications
+                      TypeFamilies
+                      TypeOperators
+                      MultiParamTypeClasses
+                      ScopedTypeVariables
+                      StandaloneKindSignatures
+  ghc-options:        -Wall -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas -fno-strictness -fno-spec-constr -fno-specialise
