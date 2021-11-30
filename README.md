@@ -62,8 +62,7 @@ You'll need to modify `exe/script-dump` to contain the appropriate constant valu
 ## Support/Issues/Community
 
 If you're looking for support, or would simply like to report a bug, feature
-request, etc please do so over on the main [plutus
-repository](https://github.com/ADADAO/YoctoDao-Development).
+request, etc please do so over on the main [here in this repository](https://github.com/ADADAO/YoctoDao-Development).
 
 For more interactive discussion, you can join the [₳DAO Discord](https://discord.gg/QgxwsRrjb4).
 
