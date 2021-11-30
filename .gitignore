@@ -24,3 +24,8 @@ cabal.project.local~
 result*
 .envrc
 .vim
+*.plutus
+owner.json
+datum.json
+*hash.txt
+*Symbol.txt
