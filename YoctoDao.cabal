@@ -43,7 +43,9 @@ common lang
 
 library
   hs-source-dirs:      src
-  exposed-modules:     YoctoDao
+  exposed-modules:     YoctoDao.Treasury
+                       YoctoDao.GovToken
+                       YoctoDao.Core
   build-depends:       aeson
                      , base ^>=4.14.1.0
                      , bytestring
@@ -84,7 +86,9 @@ library
 executable           script-dump
   main-is:           script-dump.hs
   hs-source-dirs:    exe, src
-  other-modules:     YoctoDao
+  other-modules:     YoctoDao.Treasury
+                     YoctoDao.GovToken
+                     YoctoDao.Core
   build-depends:     base
                     , aeson
                     , cardano-api

@@ -27,8 +27,9 @@
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE LambdaCase          #-}
 
-module YoctoDao where
+module YoctoDao.Core where
 
+import           Prelude                (String, show, Show)
 import           Control.Monad          hiding (fmap)
 import           PlutusTx.Maybe
 import qualified Data.Map               as Map
@@ -510,21 +511,27 @@ createProposal cp = do
             , minted = minted cp
             , yes = 0
             , no = 0
-            }
+            } --}
         
 -- We need to create the Ownership Datum UTxO with the IdMaker NFT so that it will be valid for use in proposals.
 data CreateOwnerId = CreateOwnerId
-    { owner :: !PubKeyHash
+    { createOwner :: !PubKeyHash
     } deriving (Show, Generic, FromJSON, ToJSON)
 
 createOwnerId :: forall w s. CreateOwnerId -> Contract w s Text ()
 createOwnerId co = do
-    scriptPubKeyHash <- pubKeyHash <$> Contract.ownPubKey
+    scriptPubKeyHash <- Contract.ownPubKeyHash
+    now <- currentTime
+    -- utxos <- Map.filter idIdMaker <$> utxoAt
     let ownership = Ownership
-            { owner = owner co
-            , nftSlot = 0
-            , lastTransfer = 0
-            } --}
+            { owner = createOwner co
+            , nftSlot = now
+            , lastTransfer = now
+            }
+    Contract.logInfo @String $ printf "Created Ownership: %s" (show ownership)
+  where
+    isIdMaker :: TxOutTx -> Bool
+    isIdMaker o = True
 
 -- We need to create a transaction that if going to the script will contain the Id for the script,
 --data ShiftOwnership = ShiftOwnership
@@ -532,58 +539,3 @@ createOwnerId co = do
 --data ApplyVotes = ApplyVotes
 -- We need to check to see what type of proposal is being executed, this should be done through an input of a proposal datum..?
 --data ExecuteProposal = ExecuteProposal
---}
-
-{-# INLINABLE treasuryValidator #-}
-treasuryValidator :: AssetClass -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
-treasuryValidator asset _ _ ctx =
-  let
-      txInfo = scriptContextTxInfo ctx
-
-      -- We map over all of the inputs to the transaction to gather the number of votes present.
-      txInValues = [txOutValue $ txInInfoResolved txIn | txIn <- txInfoInputs $ scriptContextTxInfo ctx]
-      tokenValues = [assetClassValueOf val asset | val <- txInValues]
-      votes = sum tokenValues -- sum the occurrences of the tokenClass inside of txInValues
-  in
-      traceIfFalse "The DAO's NFT is not present." (votes > 0)
-
-data TreasuryData
-instance Scripts.ValidatorTypes TreasuryData where
-    type instance DatumType TreasuryData = BuiltinData
-    type instance RedeemerType TreasuryData = BuiltinData
-
-treasuryValidatorInstance :: AssetClass -> Scripts.TypedValidator TreasuryData
-treasuryValidatorInstance asset = Scripts.mkTypedValidator @TreasuryData
-    ($$(PlutusTx.compile [|| treasuryValidator ||])
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode asset)
-    $$(PlutusTx.compile [|| wrap ||]) where
-        wrap = Scripts.wrapValidator @BuiltinData @BuiltinData
-
-treasuryValidatorHash :: AssetClass -> ValidatorHash
-treasuryValidatorHash = Scripts.validatorHash . treasuryValidatorInstance
-
-treasuryValidatorScript :: AssetClass -> Validator
-treasuryValidatorScript = Scripts.validatorScript . treasuryValidatorInstance
-
-treasuryValidatorAddress :: AssetClass -> Address
-treasuryValidatorAddress = Ledger.scriptAddress . treasuryValidatorScript --}
-
--- This section manages the Governance and Identity tokens within our system.
-{-# INLINABLE mkPolicy #-}
-mkPolicy :: AssetClass -> BuiltinData -> ScriptContext -> Bool
-mkPolicy asset _ ctx = traceIfFalse "The DAO's NFT is not present." (nftSum > 0)
-  where
-    txInfo = scriptContextTxInfo ctx
-    txInValues = [txOutValue $ txInInfoResolved txIn | txIn <- txInfoInputs $ scriptContextTxInfo ctx]
-    nftValues = [assetClassValueOf val asset | val <- txInValues]
-    nftSum = sum nftValues
-
-policy :: AssetClass -> Scripts.MintingPolicy
-policy asset = mkMintingPolicyScript $
-    $$(PlutusTx.compile [|| Scripts.wrapMintingPolicy . mkPolicy ||])
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode asset
-
-curSymbol :: AssetClass -> CurrencySymbol
-curSymbol asset = scriptCurrencySymbol $ policy asset

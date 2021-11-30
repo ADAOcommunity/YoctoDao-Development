@@ -16,7 +16,9 @@ import qualified Data.ByteString.Lazy as LB
 import           Ledger                     (datumHash, scriptHashAddress)
 
 
-import           YoctoDao
+import           YoctoDao.GovToken
+import           YoctoDao.Treasury
+import           YoctoDao.Core
 
 import          Plutus.V1.Ledger.Value
 import           Plutus.V1.Ledger.Api
