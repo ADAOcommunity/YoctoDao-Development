@@ -55,18 +55,17 @@ Afterwards, the command `cabal build` from the terminal should work (if `cabal` 
 Also included in the environment is a working [Haskell Language Server](https://github.com/haskell/haskell-language-server) you can integrate with your editor.
 See [here](https://github.com/haskell/haskell-language-server#configuring-your-editor) for instructions.
 
-## The Plutus Application Backend (PAB) example
+## Building the code:
+If you are able to get `cabal build` to run successfully inside of the appropriate commit of plutus then you should be able to run `cabal run script-dump` to get a whole host of files which are then able to be used to deploy the script.
 
-Please ignore the PAB section of the code for now, this 
-
+You'll need to modify `exe/script-dump` to contain the appropriate constant values for `nftSymbol` (The DAO's identity NFT) and `identityMakerSymbol` which is used to mint validity tokens within the script, (these are used to validate the amount of time a UTxO has existed for).
 
 ## Support/Issues/Community
 
 If you're looking for support, or would simply like to report a bug, feature
 request, etc please do so over on the main [plutus
-repository](https://github.com/input-output-hk/plutus).
+repository](https://github.com/ADADAO/YoctoDao-Development).
 
-For more interactive discussion, you can join the [IOG Technical Community
-Discord](https://discord.gg/sSF5gmDBYg).
+For more interactive discussion, you can join the [₳DAO Discord](https://discord.gg/QgxwsRrjb4).
 
 Thanks!
