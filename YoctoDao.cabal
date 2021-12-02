@@ -46,6 +46,7 @@ library
   exposed-modules:     YoctoDao.Treasury
                        YoctoDao.GovToken
                        YoctoDao.Core
+                       YoctoDao.OffChain
   build-depends:       aeson
                      , base ^>=4.14.1.0
                      , bytestring
