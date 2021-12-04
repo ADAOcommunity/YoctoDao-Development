@@ -10,6 +10,7 @@ module Spec.Trace (
 
 import           Control.Monad              hiding (fmap)
 import qualified Ledger
+import           Ledger.Ada
 import           Ledger.Value               as Value
 import           Plutus.Contract.Test
 import qualified Plutus.Trace.Emulator      as Trace
@@ -77,9 +78,31 @@ successfulOwnershipLockup = do
 
     void $ Trace.waitNSlots 1
 
-    Trace.callEndpoint @"1-CreateOwnership" h1 800              -- OffChain.ToFraction { Fracada.nftAsset = nftAssetClass
+    Trace.callEndpoint @"1-CreateOwnership" h1 800
+    {-- OffChain.SpendOwned { OffChain.spendAddr = Ledger.scriptHashAddress treasuryHash
+                                                                , OffChain.spendVal = Ledger.Ada.lovelaceValueOf 0
+                                                                , OffChain.spendDatum = 100 -- toBuiltinData ()
+                                                                }              -- OffChain.ToFraction { Fracada.nftAsset = nftAssetClass
                                                                 -- , Fracada.fractions = fractions
-                                                                -- , Fracada.fractionTokenName = fractionTokenName }
+                                                                -- , Fracada.fractionTokenName = fractionTokenName 
+                                                                --}
+    void $ Trace.waitNSlots 1
+
+    -- Trace.callEndpoint @"2-returnNFT" h2 nftAssetClass
+    -- void $ Trace.waitNSlots 1
+
+successfulOwnershipSpent :: Trace.EmulatorTrace ()
+successfulOwnershipSpent = do
+    h1 <- Trace.activateContractWallet (knownWallet 1) (OffChain.endpoints treasuryHash govTokenClass adaoNFT idMakerClass proposalTokenClass ownedTokenClass)
+    -- h2 <- Trace.activateContractWallet (knownWallet 2) Fracada.endpoints
+
+    void $ Trace.waitNSlots 1
+
+    Trace.callEndpoint @"2-SpendOwnedTx" h1 OffChain.SpendOwned { OffChain.spendAddr = Ledger.scriptHashAddress treasuryHash
+                                                                , OffChain.spendVal = Ledger.Ada.lovelaceValueOf 0
+                                                                , OffChain.spendDatum = 100 -- toBuiltinData ()
+                                                                }
+
     void $ Trace.waitNSlots 1
 
     -- Trace.callEndpoint @"2-returnNFT" h2 nftAssetClass

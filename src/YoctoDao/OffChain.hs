@@ -91,7 +91,7 @@ createProposal cp = do
 data SpendOwned = SpendOwned
     { spendAddr  :: !Address
     , spendVal   :: !Value
-    , spendDatum :: Datum
+    , spendDatum :: Integer
     } deriving (Show, Generic, FromJSON, ToJSON)
 
 type YoctoSchema = Endpoint "1-CreateOwnership" Integer .\/
@@ -99,6 +99,7 @@ type YoctoSchema = Endpoint "1-CreateOwnership" Integer .\/
         
 createOwnerId :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Integer -> Contract w s Text ()
 createOwnerId treasury govClass nft idMaker propclass voteclass co = do
+    Contract.logInfo @String $ printf "Creating Ownership..."
     let scriptAddr = votingPassScriptAddress treasury govClass nft idMaker propclass voteclass
         treasuryAddr = Address.scriptHashAddress treasury
     pkh <- Contract.ownPubKeyHash
@@ -126,8 +127,9 @@ createOwnerId treasury govClass nft idMaker propclass voteclass co = do
                   Constraints.unspentOutputs utxos' <>
                   Constraints.unspentOutputs futxos'
 
-        tx = Constraints.mustSpendScriptOutput nftRef (Redeemer $ toBuiltinData ()) <>
-             Constraints.mustMintValue (assetClassValue voteclass 1) <>
+        -- The line below actually causes a plutus error, this requires more investigation..
+        --tx = Constraints.mustSpendScriptOutput nftRef (Redeemer $ toBuiltinData ()) <>
+        tx = Constraints.mustMintValue (assetClassValue voteclass 1) <>
              Constraints.mustPayToOtherScript validatorHash oDatum valueToScript
 
     ledgerTx <- submitTxConstraintsWith @Void lookups tx
@@ -136,6 +138,42 @@ createOwnerId treasury govClass nft idMaker propclass voteclass co = do
 
 spendOwnershipUTxO :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> SpendOwned -> Contract w s Text ()
 spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass spend = do
+    let scriptAddr = votingPassScriptAddress treasury govClass nft idMaker propclass voteclass
+        treasuryAddr = Address.scriptHashAddress treasury
+    pkh <- Contract.ownPubKeyHash
+    now <- currentTime
+    utxos <- utxosAt scriptAddr
+    futxos <- utxosAt (Address.pubKeyHashAddress pkh)
+
+    let utxos' = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) idMaker) utxos
+        ownedUtxos = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) idMaker) utxos
+        -- We need to make sure to filter above based on ownership datum TODO and owned by the pkh interacting
+        futxos' = Map.filter (\v -> 1 <= assetClassValueOf (_ciTxOutValue v) govClass) futxos
+        (nftRef,nftTx) = head $ Map.toList utxos'
+        valueToScript = assetClassValue voteclass 1 -- <> assetClassValue govClass 1
+        ownership = Ownership
+            { owner = pkh
+            , nftSlot = now
+            , lastTransfer = now
+            }
+        oDatum = Datum $ toBuiltinData ownership
+
+        validator = votingPassValidatorScript treasury govClass nft idMaker propclass voteclass
+        validatorHash = votingPassValidatorHash treasury govClass nft idMaker propclass voteclass
+
+        lookups = Constraints.ownPubKeyHash pkh <>
+                  Constraints.mintingPolicy (policy idMaker) <>
+                  Constraints.otherScript validator <>
+                  Constraints.unspentOutputs utxos' <>
+                  Constraints.unspentOutputs futxos'
+
+        -- The line below actually causes a plutus error, this requires more investigation..
+        --tx = Constraints.mustSpendScriptOutput nftRef (Redeemer $ toBuiltinData ()) <>
+        tx = Constraints.mustMintValue (assetClassValue voteclass 1) <>
+             Constraints.mustPayToOtherScript validatorHash oDatum valueToScript
+
+    ledgerTx <- submitTxConstraintsWith @Void lookups tx
+    void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
     Contract.logInfo @String $ printf "Spent owned UTxO to: %s" (show spend)
 
 -- findIdMaker :: forall w s. Address -> AssetClass -> Contract w s Text ()
@@ -151,7 +189,7 @@ endpoints :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetCla
 endpoints treasury govClass nft idMaker propclass voteclass = forever
                 $ handleError logError
                 $ awaitPromise
-                $ createOwnerId' -- `select` spendOwnershipUTxO'
+                $ createOwnerId' `select` spendOwnershipUTxO'
   where
     createOwnerId' = endpoint @"1-CreateOwnership" $ createOwnerId treasury govClass nft idMaker propclass voteclass
-    --spendOwnershipUTxO' = endpoint @"2-SpendOwnedTx" $ spendOwnershipUTxO
+    spendOwnershipUTxO' = endpoint @"2-SpendOwnedTx" $ spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass
