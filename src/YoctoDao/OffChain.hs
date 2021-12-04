@@ -88,6 +88,14 @@ createProposal cp = do
             , yes = 0
             , no = 0
             } --}
+data SpendOwned = SpendOwned
+    { spendAddr  :: !Address
+    , spendVal   :: !Value
+    , spendDatum :: Datum
+    } deriving (Show, Generic, FromJSON, ToJSON)
+
+type YoctoSchema = Endpoint "1-CreateOwnership" Integer .\/
+                   Endpoint "2-SpendOwnedTx" SpendOwned
         
 createOwnerId :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Integer -> Contract w s Text ()
 createOwnerId treasury govClass nft idMaker propclass voteclass co = do
@@ -126,12 +134,6 @@ createOwnerId treasury govClass nft idMaker propclass voteclass co = do
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
     Contract.logInfo @String $ printf "Created Ownership: %s" (show ownership)
 
-data SpendOwned = SpendOwned
-    { spendAddr  :: !Address
-    , spendVal   :: !Value
-    , spendDatum :: Datum
-    } deriving (Show, Generic, FromJSON, ToJSON)
-
 spendOwnershipUTxO :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> SpendOwned -> Contract w s Text ()
 spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass spend = do
     Contract.logInfo @String $ printf "Spent owned UTxO to: %s" (show spend)
@@ -144,3 +146,12 @@ spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass spend = do
 --data ApplyVotes = ApplyVotes
 -- We need to check to see what type of proposal is being executed, this should be done through an input of a proposal datum..?
 --data ExecuteProposal = ExecuteProposal
+
+endpoints :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Contract () YoctoSchema Text ()
+endpoints treasury govClass nft idMaker propclass voteclass = forever
+                $ handleError logError
+                $ awaitPromise
+                $ createOwnerId' -- `select` spendOwnershipUTxO'
+  where
+    createOwnerId' = endpoint @"1-CreateOwnership" $ createOwnerId treasury govClass nft idMaker propclass voteclass
+    --spendOwnershipUTxO' = endpoint @"2-SpendOwnedTx" $ spendOwnershipUTxO
