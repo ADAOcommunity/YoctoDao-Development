@@ -129,6 +129,62 @@ executable           script-dump
                       StandaloneKindSignatures
   ghc-options:        -Wall -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas -fno-strictness -fno-spec-constr -fno-specialise
 
+executable yoctodao-pab
+  import: lang
+  main-is: Main.hs
+  hs-source-dirs: pab, src, test, exe
+  other-modules:     YoctoDao.Treasury
+                     YoctoDao.GovToken
+                     YoctoDao.Core
+                     YoctoDao.OffChain
+  ghc-options:
+    -threaded
+  build-depends:     base
+                    , aeson
+                    , cardano-api
+                    , cardano-ledger-alonzo
+                    , bytestring
+                    , containers
+                    , freer-extras
+                    , plutus-core
+                    , plutus-contract
+                    , plutus-ledger
+                    , plutus-ledger-api
+                    , plutus-use-cases
+                    , plutus-tx
+                    , plutus-tx-plugin
+                    , text
+                    , serialise
+                    , playground-common
+                    , data-default
+                    , plutus-pab
+                    , freer-simple
+                    , prettyprinter
+                    , openapi3
+                    , extensible-effects
+  default-language:   Haskell2010
+  default-extensions: DataKinds
+                      DeriveAnyClass
+                      DeriveGeneric
+                      DerivingStrategies
+                      ExplicitForAll
+                      FunctionalDependencies
+                      GADTs
+                      MultiParamTypeClasses
+                      NamedFieldPuns
+                      OverloadedStrings
+                      PolyKinds
+                      KindSignatures
+                      StandaloneDeriving
+                      TemplateHaskell
+                      TypeApplications
+                      TypeFamilies
+                      TypeOperators
+                      MultiParamTypeClasses
+                      ScopedTypeVariables
+                      StandaloneKindSignatures
+  ghc-options:        -Wall -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas -fno-strictness -fno-spec-constr -fno-specialise
+
 test-suite          yoctodao-test
   type:             exitcode-stdio-1.0
   main-is:          Spec.hs

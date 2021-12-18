@@ -89,4 +89,4 @@ treasuryValidatorScript :: AssetClass -> Validator
 treasuryValidatorScript = Scripts.validatorScript . treasuryValidatorInstance
 
 treasuryValidatorAddress :: AssetClass -> Address
-treasuryValidatorAddress = Ledger.scriptAddress . treasuryValidatorScript --}
+treasuryValidatorAddress = Ledger.scriptAddress . treasuryValidatorScript

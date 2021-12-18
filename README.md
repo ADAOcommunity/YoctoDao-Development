@@ -1,6 +1,8 @@
-# Plutus Platform starter project
+# YoctoDAO Development Project
 
 This is the repository dedicated to the continued development of YoctoDAO which is being used as a basis for ₳DAO.
+
+Please note that only the on-chain code in the repo is considered to be working at this time, and even the on-chain code needs to be tested further than it has been and there has been no formal audit at this time. -- Another repository is being created to interact with the on-chain components that are described in the code here.
 
 ## Setting up
 

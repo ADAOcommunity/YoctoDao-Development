@@ -1,4 +1,7 @@
 {--
+    WARNING :: DO NOT USE
+    This is untested and unfinished, the other files are useful but this one is not.
+
    Copyright 2021 ₳DAO
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,135 +64,270 @@ import           YoctoDao.Core
 import           YoctoDao.GovToken
 import           YoctoDao.Treasury
 
-{-- We need to create the proposal using the IdMaker NFT so that it will be valid, also ensure a valid proposal..
+data DaoParams = DaoParams
+    { daoTreasure  :: !ValidatorHash
+    , daoGovToken  :: !AssetClass
+    , daoIdNFT     :: !AssetClass
+    , daoIdMaker   :: !AssetClass
+    , daoPropClass :: !AssetClass
+    , daoOwnClass  :: !AssetClass
+    } deriving (Show, Generic, FromJSON, ToJSON)
+
+data SpendOwned = SpendOwned
+    { spendHash :: !PubKeyHash
+    , spendVal  :: !Value
+    } deriving (Show, Generic, FromJSON, ToJSON)
+
+instance ToSchema SpendOwned
+
 data CreateProposal = CreateProposal
     { proposalStart :: !POSIXTime
     , scriptUpdate  :: !Bool
-    , scriptAddr    :: Address
+    , scriptAddr    :: ValidatorHash
     , spend         :: !Bool
     , spendValue    :: Value
-    , spendAddr     :: Address
+    , spendAddr     :: ValidatorHash
     , minting       :: !Bool
     , minted        :: Integer
     } deriving (Show, Generic, FromJSON, ToJSON)
 
-createProposal :: forall w s. CreateProposal -> Contract w s Text ()
-createProposal cp = do
-    scriptPubKeyHash <- pubKeyHash <$> Contract.ownPubKey
-    let proposal = Proposal
-            { proposalStart = proposalStart cp
-            , scriptUpdate  = scriptUpdate cp
-            , scriptAddr = scriptAddr cp
-            , spend = spend cp
-            , spendValue = spendValue cp
-            , spendAddr = spendAddr cp
-            , minting = minting cp
-            , minted = minted cp
-            , yes = 0
-            , no = 0
-            } --}
-data SpendOwned = SpendOwned
-    { spendAddr  :: !Address
-    , spendVal   :: !Value
-    , spendDatum :: Integer
+--PlutusTx.makeLift ''CreateProposal
+instance ToSchema CreateProposal
+
+data VoteInput = VoteInput
+    { proposal :: !CreateProposal
+    , yes      :: !Bool
     } deriving (Show, Generic, FromJSON, ToJSON)
 
-type YoctoSchema = Endpoint "1-CreateOwnership" Integer .\/
-                   Endpoint "2-SpendOwnedTx" SpendOwned
-        
-createOwnerId :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Integer -> Contract w s Text ()
-createOwnerId treasury govClass nft idMaker propclass voteclass co = do
+--PlutusTx.makeLift ''VoteInput
+instance ToSchema VoteInput
+
+type YoctoSchema = Endpoint "0-InitializeDao" () .\/
+                   Endpoint "1-CreateOwnership" Integer .\/
+                   Endpoint "2-SpendOwnedTx" SpendOwned .\/
+                   Endpoint "3-CreateProposal" CreateProposal .\/
+                   Endpoint "4-VoteProposal" VoteInput .\/
+                   Endpoint "5-SpendIdNft" CreateProposal
+
+aDatum :: GovernanceDatum
+aDatum = GIdMaker ()
+
+startDao :: forall w s. DaoParams -> Contract w s Text YDao
+startDao op = do
+    let yDao = YDao
+            { yTreasury = daoTreasure op
+            , yGovClass = daoGovToken op
+            , yNft = daoIdNFT op
+            , yIdMaker = daoIdMaker op
+            , yPropClass = daoPropClass op
+            , yOwnClass = daoOwnClass op
+            }
+    logInfo @String $ "started dao" ++ show yDao
+    return yDao
+
+useDao :: forall w s. YDao -> () -> Contract w s Text ()
+useDao yDao usage = do
+    m <- findDaoIdMaker yDao
+    let c = Constraints.mustPayToTheScript (GIdMaker $ usage) $ (assetClassValue (yNft yDao) 1 <> assetClassValue (yIdMaker yDao) 1)
+    case m of
+        Nothing -> do
+            ledgerTx <- submitTxConstraints (votingPassValidatorInstance yDao) c
+            awaitTxConfirmed $ getCardanoTxId ledgerTx
+            logInfo @String $ "Dao instantiated."
+        Just (oref, o,  _) -> do
+            let lookups = Constraints.unspentOutputs (Map.singleton oref o)     <>
+                          Constraints.typedValidatorLookups (votingPassValidatorInstance yDao) <>
+                          Constraints.otherScript (votingPassValidatorScript yDao)
+                tx      = c <> Constraints.mustSpendScriptOutput oref (Redeemer $ PlutusTx.toBuiltinData ())
+            -- ledgerTx <- submitTxConstraintsWith @Voting lookups tx
+            -- awaitTxConfirmed $ getCardanoTxId ledgerTx
+            logInfo @String $ "This is not supposed to occur. You likely initialized already."
+
+findDaoNFT :: forall w s. YDao -> Contract w s Text (Maybe (TxOutRef, ChainIndexTxOut, Integer))
+findDaoNFT dao = do
+    utxos <- Map.filter f <$> utxosAt (votingPassScriptAddress dao)
+    return $ case Map.toList utxos of
+        [(oref, o)] -> do
+            return (oref, o, 42)
+        _           -> Nothing
+  where
+    f :: ChainIndexTxOut -> Bool
+    f o = assetClassValueOf (_ciTxOutValue o) (yNft dao) == 1
+
+findDaoIdMaker :: forall w s. YDao -> Contract w s Text (Maybe (TxOutRef, ChainIndexTxOut, ()))
+findDaoIdMaker dao = do
+    utxos <- Map.filter f <$> (utxosAt (votingPassScriptAddress dao))
+    return $ case Map.toList utxos of
+        [(oref, o)] -> do
+            return (oref, o, ())
+        _           -> Nothing
+  where
+    f :: ChainIndexTxOut -> Bool
+    f o = assetClassValueOf (_ciTxOutValue o) (yIdMaker dao) == 1
+
+findProposal :: forall w s. YDao -> CreateProposal -> Contract w s Text (Maybe (TxOutRef, ChainIndexTxOut, ()))
+findProposal dao proposal = do
+    utxos <- Map.filter f <$> (utxosAt (votingPassScriptAddress dao))
+    return $ case Map.toList utxos of
+        [(oref, o)] -> do
+            return (oref, o, ())
+        (oref, o):os -> do
+            return (oref, o, ())
+        _          -> Nothing
+  where
+    f :: ChainIndexTxOut -> Bool
+    f o = assetClassValueOf (_ciTxOutValue o) (yPropClass dao) >= 1 &&
+          True
+          -- Replace true with the datum analysis
+
+createOwnerId :: forall w s. YDao -> Integer -> Contract w s Text ()
+createOwnerId yDao co = do
     Contract.logInfo @String $ printf "Creating Ownership..."
-    let scriptAddr = votingPassScriptAddress treasury govClass nft idMaker propclass voteclass
-        treasuryAddr = Address.scriptHashAddress treasury
+    let scriptAddr = votingPassScriptAddress yDao
+        treasuryAddr = Address.scriptHashAddress (yTreasury yDao)
+    m <- findDaoIdMaker yDao
+    pkh <- Contract.ownPubKeyHash
+    now <- currentTime
+    utxos <- utxosAt scriptAddr
+    futxos <- utxosAt (Address.pubKeyHashAddress pkh)
+    let c = Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yIdMaker yDao) 1) <>
+            Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yNft yDao) 1)
+
+    case m of
+        Nothing -> do
+            ledgerTx <- submitTxConstraints (votingPassValidatorInstance yDao) c
+            awaitTxConfirmed $ getCardanoTxId ledgerTx
+            logInfo @String $ "Initialized DAO again?"
+        Just (oref, o, _) -> do
+            let utxos' = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) (yIdMaker yDao)) utxos
+                futxos' = Map.filter (\v -> 1 <= assetClassValueOf (_ciTxOutValue v) (yGovClass yDao)) futxos
+                (nftRef,nftTx) = head $ Map.toList utxos'
+                valueToScript = assetClassValue (yOwnClass yDao) 1 <> assetClassValue (yGovClass yDao) co
+                ownership = Ownership
+                    { owner = pkh
+                    , nftSlot = now
+                    , lastTransfer = now
+                    }
+                oDatum = GOwnership ownership
+
+                validator = votingPassValidatorScript yDao
+                validatorI = votingPassValidatorInstance yDao
+                validatorHash = votingPassValidatorHash yDao
+
+                lookups = Constraints.ownPubKeyHash pkh <>
+                        Constraints.mintingPolicy (policy (yIdMaker yDao)) <>
+                        Constraints.otherScript validator <>
+                        Constraints.unspentOutputs utxos' <>
+                        Constraints.unspentOutputs futxos'
+
+                tx = Constraints.mustSpendScriptOutput nftRef unitRedeemer <>
+                    Constraints.mustPayToTheScript aDatum (_ciTxOutValue nftTx) <>
+                    Constraints.mustMintValue (assetClassValue (yOwnClass yDao) 1) <>
+                    Constraints.mustPayToTheScript oDatum valueToScript
+
+            ledgerTx <- submitTxConstraintsWith @Voting lookups tx
+            void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
+            Contract.logInfo @String $ printf "Created Ownership: %s" (show ownership)
+
+spendOwnershipUTxOToWallet :: forall w s. YDao -> SpendOwned -> Contract w s Text ()
+spendOwnershipUTxOToWallet yDao spendToWallet = do -- TODO I don't think that this is adequate.
+    let scriptAddr = votingPassScriptAddress yDao
+        treasuryAddr = Address.scriptHashAddress (yTreasury yDao)
     pkh <- Contract.ownPubKeyHash
     now <- currentTime
     utxos <- utxosAt scriptAddr
     futxos <- utxosAt (Address.pubKeyHashAddress pkh)
 
-    let utxos' = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) idMaker) utxos
-        futxos' = Map.filter (\v -> 1 <= assetClassValueOf (_ciTxOutValue v) govClass) futxos
-        (nftRef,nftTx) = head $ Map.toList utxos'
-        valueToScript = assetClassValue voteclass 1 <> assetClassValue govClass co
-        ownership = Ownership
-            { owner = pkh
-            , nftSlot = now
-            , lastTransfer = now
-            }
-        oDatum = Datum $ toBuiltinData ownership
+    let valueSpentByOwner = spendVal spendToWallet
+        validator = votingPassValidatorScript yDao
+        validatorHash = votingPassValidatorHash yDao
 
-        validator = votingPassValidatorScript treasury govClass nft idMaker propclass voteclass
-        validatorHash = votingPassValidatorHash treasury govClass nft idMaker propclass voteclass
+        lookups = Constraints.otherScript validator
+                  -- Constraints.ownPubKeyHash pkh <>
+                  -- Constraints.mintingPolicy (policy idMaker) <>
 
-        lookups = Constraints.ownPubKeyHash pkh <>
-                  Constraints.mintingPolicy (policy idMaker) <>
-                  Constraints.otherScript validator <>
-                  Constraints.unspentOutputs utxos' <>
-                  Constraints.unspentOutputs futxos'
-
-        -- The line below actually causes a plutus error, this requires more investigation..
         --tx = Constraints.mustSpendScriptOutput nftRef (Redeemer $ toBuiltinData ()) <>
-        tx = Constraints.mustMintValue (assetClassValue voteclass 1) <>
-             Constraints.mustPayToOtherScript validatorHash oDatum valueToScript
+        tx = Constraints.mustPayToPubKey (spendHash spendToWallet) valueSpentByOwner
 
-    ledgerTx <- submitTxConstraintsWith @Void lookups tx
+    ledgerTx <- submitTxConstraintsWith @Voting lookups tx
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
-    Contract.logInfo @String $ printf "Created Ownership: %s" (show ownership)
+    Contract.logInfo @String $ printf "Spent owned UTxO to: %s" (show spendToWallet)
 
-spendOwnershipUTxO :: forall w s. ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> SpendOwned -> Contract w s Text ()
-spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass spend = do
-    let scriptAddr = votingPassScriptAddress treasury govClass nft idMaker propclass voteclass
-        treasuryAddr = Address.scriptHashAddress treasury
+createProposal :: forall w s. YDao -> CreateProposal -> Contract w s Text ()
+createProposal yDao pInput = do
+    Contract.logInfo @String $ printf "Creating Proposal"
+    let scriptAddr = votingPassScriptAddress yDao
+        treasuryAddr = Address.scriptHashAddress (yTreasury yDao)
+    m <- findDaoIdMaker yDao
     pkh <- Contract.ownPubKeyHash
     now <- currentTime
     utxos <- utxosAt scriptAddr
     futxos <- utxosAt (Address.pubKeyHashAddress pkh)
+    let c = Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yIdMaker yDao) 1) <>
+            Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yNft yDao) 1)
 
-    let utxos' = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) idMaker) utxos
-        ownedUtxos = Map.filter (\v -> 1 == assetClassValueOf (_ciTxOutValue v) idMaker) utxos
-        -- We need to make sure to filter above based on ownership datum TODO and owned by the pkh interacting
-        futxos' = Map.filter (\v -> 1 <= assetClassValueOf (_ciTxOutValue v) govClass) futxos
-        (nftRef,nftTx) = head $ Map.toList utxos'
-        valueToScript = assetClassValue voteclass 1 -- <> assetClassValue govClass 1
-        ownership = Ownership
-            { owner = pkh
-            , nftSlot = now
-            , lastTransfer = now
-            }
-        oDatum = Datum $ toBuiltinData ownership
+    case m of
+        Nothing -> do
+            ledgerTx <- submitTxConstraints (votingPassValidatorInstance yDao) c
+            awaitTxConfirmed $ getCardanoTxId ledgerTx
+            logInfo @String $ "Initialized DAO again?"
+        Just (oref, o, _) -> do
+            return () -- TODO this endpoint needs to be implemented.
+            -- If we have the IdMaker then we want to mint a proposal token and validate the proposal values, then create the UTxO with the Datum and the proposal token.
 
-        validator = votingPassValidatorScript treasury govClass nft idMaker propclass voteclass
-        validatorHash = votingPassValidatorHash treasury govClass nft idMaker propclass voteclass
+voteProposal :: forall w s. YDao -> VoteInput -> Contract w s Text ()
+voteProposal yDao vInput = do
+    Contract.logInfo @String $ printf "Vote Proposal"
+    let scriptAddr = votingPassScriptAddress yDao
+        treasuryAddr = Address.scriptHashAddress (yTreasury yDao)
+    m <- findProposal yDao (proposal vInput)
 
-        lookups = Constraints.ownPubKeyHash pkh <>
-                  Constraints.mintingPolicy (policy idMaker) <>
-                  Constraints.otherScript validator <>
-                  Constraints.unspentOutputs utxos' <>
-                  Constraints.unspentOutputs futxos'
+    let c = Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yIdMaker yDao) 1) <>
+            Constraints.mustPayToTheScript (GIdMaker $ ()) (assetClassValue (yNft yDao) 1)
 
-        -- The line below actually causes a plutus error, this requires more investigation..
-        --tx = Constraints.mustSpendScriptOutput nftRef (Redeemer $ toBuiltinData ()) <>
-        tx = Constraints.mustMintValue (assetClassValue voteclass 1) <>
-             Constraints.mustPayToOtherScript validatorHash oDatum valueToScript
+    case m of
+        Nothing -> do
+            ledgerTx <- submitTxConstraints (votingPassValidatorInstance yDao) c
+            awaitTxConfirmed $ getCardanoTxId ledgerTx
+            logInfo @String $ "Initialized DAO again?"
+        Just (oref, o, _) ->
+            return () -- TODO This endpoint needs to be implemented.
+            -- 
+-- Need to implement
+--  - gatherOwnGov
 
-    ledgerTx <- submitTxConstraintsWith @Void lookups tx
-    void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
-    Contract.logInfo @String $ printf "Spent owned UTxO to: %s" (show spend)
+useProposal :: forall w s. YDao -> CreateProposal -> Contract w s Text ()
+useProposal yDao proposal = do return ()
+-- Helper functions for this: TODO this is not implemented
+--  - 
+--  - 
 
--- findIdMaker :: forall w s. Address -> AssetClass -> Contract w s Text ()
+{-- runDao :: DaoParams -> Contract (Last YDao) YoctoSchema Text ()
+runDao op = do
+    dao <- startDao op
+    tell $ Last $ Just dao
+    go dao
+  where
+    go :: YDao -> Contract (Last YDao) YoctoSchema Text a
+    go yDao = do
+        x <- endpoint @"update"
+        --updateOracle oracle x
+        go oracle --}
 
--- We need to create a transaction that if going to the script will contain the Id for the script,
---data ShiftOwnership = ShiftOwnership
--- We need to apply owned votes with the proposal and send all votes back to the script with the ownership FT attached.
---data ApplyVotes = ApplyVotes
--- We need to check to see what type of proposal is being executed, this should be done through an input of a proposal datum..?
---data ExecuteProposal = ExecuteProposal
-
-endpoints :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Contract () YoctoSchema Text ()
-endpoints treasury govClass nft idMaker propclass voteclass = forever
+endpoints :: YDao -> Contract () YoctoSchema Text ()
+endpoints yDao = forever
                 $ handleError logError
                 $ awaitPromise
-                $ createOwnerId' `select` spendOwnershipUTxO'
+                $ initialize' `select`
+                  createOwnerId' `select`
+                  spendOwnershipUTxO' `select`
+                  createProposal' `select`
+                  voteProposal' `select`
+                  useProposal'
   where
-    createOwnerId' = endpoint @"1-CreateOwnership" $ createOwnerId treasury govClass nft idMaker propclass voteclass
-    spendOwnershipUTxO' = endpoint @"2-SpendOwnedTx" $ spendOwnershipUTxO treasury govClass nft idMaker propclass voteclass
+    initialize' = endpoint @"0-InitializeDao" $ useDao yDao
+    createOwnerId' = endpoint @"1-CreateOwnership" $ createOwnerId yDao
+    spendOwnershipUTxO' = endpoint @"2-SpendOwnedTx" $ spendOwnershipUTxOToWallet yDao
+    createProposal' = endpoint @"3-CreateProposal" $ createProposal yDao
+    voteProposal' = endpoint @"4-VoteProposal" $ voteProposal yDao
+    useProposal' = endpoint @"5-SpendIdNft" $ useProposal yDao

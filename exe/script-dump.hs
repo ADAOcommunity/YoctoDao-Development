@@ -20,11 +20,11 @@ import           YoctoDao.GovToken
 import           YoctoDao.Treasury
 import           YoctoDao.Core
 
-import          Plutus.V1.Ledger.Value
+import           Plutus.V1.Ledger.Value
 import           Plutus.V1.Ledger.Api
-import Data.String                         (IsString (..))
+import           Data.String                         (IsString (..))
 import           Data.Aeson
-import GHC.Num (encodeDoubleInteger)
+import           GHC.Num (encodeDoubleInteger)
 
 nftSymbol = fromString "2f1ca92cbb53b23e214393fa230a25da97bbcc9e55d76e211a4deccf" -- MAINNET
 -- nftSymbol = fromString "2ab7e0898d0059a7859ed219e7d0e0bfe15e148cd07efaa61c5e258c" -- TESTNET
@@ -53,6 +53,16 @@ voteClass = AssetClass (identitySymbol, ownName)
 tokenTrace = TokenTrace {tMinted = 1000, treasuryValue = 0}
 myOwnership = Ownership {owner = myPubKeyHash, nftSlot = 0, lastTransfer = 16379531770}
 
+yDao :: YDao
+yDao = YDao
+    { yTreasury = treasury
+    , yGovClass = govClass
+    , yNft = nft
+    , yIdMaker = identityMakerClass
+    , yPropClass = propClass
+    , yOwnClass = voteClass
+    }
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -69,7 +79,7 @@ main = do
         validatorname = "validator.plutus"
         mintGov = "mintGov.plutus"
         mintIdentity = "mintIdentity.plutus"
-        appliedValidatorScript = votingPassValidatorScript treasury govClass nft identityMakerClass propClass voteClass
+        appliedValidatorScript = votingPassValidatorScript yDao
         appliedTreasuryScript = treasuryValidatorScript nft
         appliedMintGov = policy nft
         appliedMintIdentity = policy identityMakerClass
@@ -127,7 +137,7 @@ main = do
 
       writeFile "idSymbol.txt" (show $ curSymbol identityMakerClass)
 
-      writeFile "validator-hash.txt" (show $ votingPassValidatorHash treasury govClass nft identityMakerClass propClass voteClass)
+      writeFile "validator-hash.txt" (show $ votingPassValidatorHash yDao)
 
       LB.writeFile "datum.json" encoded
       LB.writeFile "owner.json" ownerEncoded

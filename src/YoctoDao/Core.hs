@@ -56,6 +56,18 @@ import           Data.String          (IsString (..))
 import           Data.Aeson           (ToJSON, FromJSON)
 import           Playground.Contract
 
+data YDao = YDao
+    { yTreasury  :: !ValidatorHash
+    , yGovClass  :: !AssetClass
+    , yNft       :: !AssetClass
+    , yIdMaker   :: !AssetClass
+    , yPropClass :: !AssetClass
+    , yOwnClass  :: !AssetClass
+    } deriving (Show, Generic, FromJSON, ToJSON)
+
+PlutusTx.makeLift ''YDao
+PlutusTx.unstableMakeIsData ''YDao
+
 data Proposal = Proposal
     { proposalStart :: !POSIXTime
     , scriptUpdate  :: !Bool
@@ -89,13 +101,13 @@ data TokenTrace = TokenTrace
 PlutusTx.makeLift ''TokenTrace
 PlutusTx.unstableMakeIsData ''TokenTrace
 
-data IdMaker = IdMaker AssetClass
+data IdMaker = IdMaker ()
     deriving (Show, Generic, FromJSON, ToJSON)
 
 PlutusTx.makeLift ''IdMaker
 PlutusTx.unstableMakeIsData ''IdMaker
 
-data GovernanceDatum = GProposal Proposal | GOwnership Ownership | GTokenTrace TokenTrace | GIdMaker IdMaker
+data GovernanceDatum = GProposal Proposal | GOwnership Ownership | GTokenTrace TokenTrace | GIdMaker ()
     deriving (Show, Generic, FromJSON, ToJSON)
 
 PlutusTx.makeLift ''GovernanceDatum
@@ -404,9 +416,17 @@ correctScriptOutputs treasury nft txInfo txIns txOuts continuingOutputs propTxos
                 _ -> False
 
 {-# INLINABLE votingPassValidator #-}
-votingPassValidator :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> GovernanceDatum -> BuiltinData -> ScriptContext -> Bool
-votingPassValidator treasury govClass nft idMaker propclass voteclass datum r ctx =
+-- votingPassValidator :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> GovernanceDatum -> BuiltinData -> ScriptContext -> Bool
+-- votingPassValidator treasury govClass nft idMaker propclass voteclass datum r ctx =
+votingPassValidator :: YDao -> GovernanceDatum -> () -> ScriptContext -> Bool
+votingPassValidator yDao datum r ctx =
   let
+      treasury = yTreasury yDao
+      govClass = yGovClass yDao
+      nft = yNft yDao
+      idMaker = yIdMaker yDao
+      propclass = yPropClass yDao
+      voteclass = yOwnClass yDao
       txInfo = scriptContextTxInfo ctx
 
       treasuryAddr = scriptHashAddress treasury
@@ -455,32 +475,22 @@ votingPassValidator treasury govClass nft idMaker propclass voteclass datum r ct
 data Voting
 instance Scripts.ValidatorTypes Voting where
     type instance DatumType Voting = GovernanceDatum -- Proposal | Owner | TokenTrace | IdMaker
-    type instance RedeemerType Voting = BuiltinData
+    type instance RedeemerType Voting = ()
 
 -- This section allows for the code above to be easily compiled to the information necessary to deploy on chain.
-votingPassValidatorInstance :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Scripts.TypedValidator Voting
-votingPassValidatorInstance treasury govClass nft idMaker propclass voteclass  = Scripts.mkTypedValidator @Voting
+votingPassValidatorInstance :: YDao -> Scripts.TypedValidator Voting
+votingPassValidatorInstance yDao  = Scripts.mkTypedValidator @Voting
     ($$(PlutusTx.compile [|| votingPassValidator ||])
     `PlutusTx.applyCode`
-    PlutusTx.liftCode treasury
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode govClass
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode nft
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode idMaker
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode propclass
-    `PlutusTx.applyCode`
-    PlutusTx.liftCode voteclass)
+    PlutusTx.liftCode yDao)
     $$(PlutusTx.compile [|| wrap ||]) where
-        wrap = Scripts.wrapValidator @GovernanceDatum @BuiltinData
+        wrap = Scripts.wrapValidator @GovernanceDatum @()
 
-votingPassValidatorHash :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> ValidatorHash
-votingPassValidatorHash treasury govClass nft idMaker propclass voteclass = Scripts.validatorHash $ votingPassValidatorInstance treasury govClass nft idMaker propclass voteclass
+votingPassValidatorHash :: YDao -> ValidatorHash
+votingPassValidatorHash yDao = Scripts.validatorHash $ votingPassValidatorInstance yDao
 
-votingPassValidatorScript :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Validator
-votingPassValidatorScript treasury govClass nft idMaker propclass voteclass = Scripts.validatorScript $ votingPassValidatorInstance treasury govClass nft idMaker propclass voteclass
+votingPassValidatorScript :: YDao -> Validator
+votingPassValidatorScript yDao = Scripts.validatorScript $ votingPassValidatorInstance yDao
 
-votingPassScriptAddress :: ValidatorHash -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> AssetClass -> Address
-votingPassScriptAddress treasury govClass nft idMaker propclass voteclass = Ledger.scriptAddress $ votingPassValidatorScript treasury govClass nft idMaker propclass voteclass
+votingPassScriptAddress :: YDao -> Address
+votingPassScriptAddress yDao = Ledger.scriptAddress $ votingPassValidatorScript yDao

@@ -73,3 +73,16 @@ policy asset = mkMintingPolicyScript $
 
 curSymbol :: AssetClass -> CurrencySymbol
 curSymbol asset = scriptCurrencySymbol $ policy asset
+
+{--
+THIS IS FOR WHEN THE SIMULATION IS BEING USED, NOT RELEVANT TO PRODUCTION.
+{-# INLINABLE testPolicy #-}
+testPolicy :: BuiltinData -> ScriptContext -> Bool
+testPolicy _ ctx = True
+
+testPolicy' :: Scripts.MintingPolicy
+testPolicy' = mkMintingPolicyScript $
+    $$(PlutusTx.compile [|| Scripts.wrapMintingPolicy testPolicy ||])
+
+testSymbol :: CurrencySymbol
+testSymbol = scriptCurrencySymbol $ testPolicy' --}
